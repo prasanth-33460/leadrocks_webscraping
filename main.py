@@ -1,4 +1,4 @@
-from scrap.login_automation import LoginAutomation
+from app.login.login_automation import LoginAutomation
 login = LoginAutomation()
 
 if __name__ == "__main__":
