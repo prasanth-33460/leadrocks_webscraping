@@ -1,8 +1,7 @@
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
@@ -13,49 +12,6 @@ class Scrapper:
         self.browser = webdriver.Chrome()
         self.output_file = 'app/output/scrapped_data.csv'
         self.header_written = False
-
-    # def read_to_csv(self):
-    #     """Extracts data from the page and writes to CSV."""
-    #     try:
-    #         rows = self.browser.find_elements(By.CSS_SELECTOR, ".data-row")  # Adjust selector to your data rows
-    #         for index, row in enumerate(rows):
-    #             data = {}
-    #             try:
-    #                 data["Name"] = row.find_element(By.CSS_SELECTOR, ".name").text  # Adjust selectors
-    #             except Exception:
-    #                 data["Name"] = "N/A"  # Handle missing "Name"
-
-    #             try:
-    #                 data["Position"] = row.find_element(By.CSS_SELECTOR, ".position").text
-    #             except Exception:
-    #                 data["Position"] = "N/A"  # Handle missing "Position"
-
-    #             try:
-    #                 data["Company"] = row.find_element(By.CSS_SELECTOR, ".company").text
-    #             except Exception:
-    #                 data["Company"] = "N/A"  # Handle missing "Company"
-
-    #             self.write_to_csv(data)
-    #             print(f"Processed row {index + 1}")
-    #         print("Data successfully written to CSV.")
-    #     except Exception as e:
-    #         print(f"Error reading data to CSV: {e}")
-            
-    # def write_to_csv(self, data):
-    #     """Write the extracted data to a CSV file."""
-    #     try:
-    #         with open(self.output_file, mode="a", newline="", encoding="utf-8") as file:
-    #             writer = csv.writer(file)
-
-    #             # Write header only if it's not already written
-    #             if not self.header_written:
-    #                 writer.writerow(data.keys())  # Write the column headers
-    #                 self.header_written = True  # Set the flag to True after writing the header
-                
-    #             writer.writerow(data.values())  # Write the data row
-    #         print("Data written to CSV successfully.")
-    #     except Exception as e:
-    #         print(f"Error while writing to CSV: {e}")
     
     def write_to_csv(self, data):
         """Writes data to a CSV file with the structure of terminal output."""
@@ -73,7 +29,7 @@ class Scrapper:
             print("Data successfully written to CSV.")
         except Exception as e:
             print(f"Error writing to CSV: {e}")
-                                        
+
     def fill_input_field(self, name, value):
         for _ in range(3):  # Retry up to 3 times
             try:
@@ -87,20 +43,42 @@ class Scrapper:
             except Exception as e:
                 print(f"Retrying input for {name} due to: {e}")
 
-    def select_from_datalist(self, input_name, option_value):
+    def select_from_dropdown(self, input_name, option_value):
+        """
+        Selects an option from an input field with a datalist by simulating user input.
+
+        Parameters:
+            input_name (str): The `name` attribute of the input field.
+            option_value (str): The value to select from the datalist.
+        """
         for _ in range(3):  # Retry up to 3 times
             try:
+                # Wait for the input field to be present
                 input_field = WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.NAME, input_name)))
-                input_field.click()  # Click to activate the datalist options
-                input_field.clear()
-                input_field.send_keys(option_value)
-                time.sleep(2)  # Wait for autocomplete suggestions (if any) to appear
-                input_field.send_keys(Keys.ARROW_DOWN)
-                input_field.send_keys(Keys.ENTER)  # Select the option
-                break
-            except Exception as e:
-                print(f"Retrying input for {input_name} due to: {e}")
+                
+                # Clear any existing input and enter the desired value
+                input_field.click()
+                time.sleep(2)  # Allow time for the datalist suggestions to populate
+                
+                datalist_id = input_field.get_attribute("list")
+                options = self.browser.find_elements(By.XPATH, f'//datalist[@id="{datalist_id}"]/option')
+                
+                for option in options:
+                    if option.get_attribute("value") == option_value:
+                        option.click()  # Select the desired option
+                        time.sleep(1)
+                        break
+                    else:
+                        raise ValueError(f"Option '{option_value}' not found in the datalist.")
 
+                print(f"Selected '{option_value}' for field '{input_name}'.")
+                return  # Exit loop on success
+            
+            except Exception as e:
+                print(f"Retrying selection for {input_name} due to: {e}")
+                time.sleep(2)  # Wait before retry
+        raise Exception(f"Failed to select '{option_value}' for field '{input_name}' after 3 attempts.")
+                
     def extract_results(self, global_index):
         results = WebDriverWait(self.browser, 20).until(EC.presence_of_all_elements_located((By.XPATH, '//div[@class="profiles"]//table//tr[@data-id]')))
         for result in results:
@@ -192,15 +170,15 @@ if __name__ == "__main__":
         WebDriverWait(scrap.browser, 20).until(EC.presence_of_element_located((By.NAME, 'position')))
         
         # Manually enter job title and company name/URL
-        scrap.fill_input_field('position', 'desk')  # Manually enter the job title
+        scrap.fill_input_field('position', 'Software Engineer')  # Manually enter the job title
         scrap.fill_input_field('company', 'Google')  # Manually enter the company name or URL
+        scrap.fill_input_field('geo', 'United States')
         
         # Use drop-down selection for location, industry, team size, revenue range, and total funding
-        #scrap.select_from_datalist('geo', 'United States')
-        # select_from_datalist('industry', 'Information Technology and Services')
-        # select_from_datalist('team_size', '11-50')
-        # select_from_datalist('revenue_range', '$1M to $10M')
-        # select_from_datalist('total_funding', '$10M to $100M')
+        # scrap.select_from_dropdown('industry', 'information technology and services')
+        # scrap.select_from_dropdown('team_size', '10001+')
+        # scrap.select_from_dropdown('revenue_range', '$1M to $10M')
+        # scrap.select_from_dropdown('total_funding', '$10M to $100M')
         
         # Click the "Search" button
         search_button = WebDriverWait(scrap.browser, 10).until(EC.element_to_be_clickable((By.XPATH, '//button[text()="Search"]')))
