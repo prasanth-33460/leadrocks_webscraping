@@ -7,17 +7,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 
-# # Setup Chrome driver options
-# chrome_options = Options()
-# chrome_options.add_argument("--headless")  # Run in headless mode
-# chrome_options.add_argument("--no-sandbox")
-# chrome_options.add_argument("--disable-dev-shm-usage")
-
-# Set the path for ChromeDriver
-# service = Service('/path/to/chromedriver')  # Update with your chromedriver path
-
 # Initialize the WebDriver
 browser = webdriver.Chrome()
+
 def fill_input_field(name, value):
     for _ in range(3):  # Retry up to 3 times
         try:
@@ -45,9 +37,9 @@ def select_from_datalist(input_name, option_value):
         except Exception as e:
             print(f"Retrying input for {input_name} due to: {e}")
 
-def extract_results():
+def extract_results(global_index):
     results = WebDriverWait(browser, 20).until(EC.presence_of_all_elements_located((By.XPATH, '//div[@class="profiles"]//table//tr[@data-id]')))
-    for index, result in enumerate(results):
+    for result in results:
         try:
             name = result.find_element(By.TAG_NAME, 'h3').text
             job_title = result.find_element(By.TAG_NAME, 'small').text
@@ -57,7 +49,7 @@ def extract_results():
             company_info = ", ".join([detail.text for detail in company_details])
             website_link = result.find_element(By.XPATH, './/a[contains(@class, "url")]').get_attribute('href')
             
-            print(f"Result {index + 1}:")
+            print(f"Result {global_index}:")
             print(f"  Name: {name}")
             print(f"  Job Title: {job_title}")
             print(f"  Email: {email}")
@@ -65,8 +57,10 @@ def extract_results():
             print(f"  Company Info: {company_info}")
             print(f"  Website: {website_link}")
             print("------------------------")
+            global_index += 1
         except Exception as e:
-            print(f"An error occurred while processing result {index + 1}: {e}")
+            print(f"An error occurred while processing result {global_index}: {e}")
+    return global_index
 
 try:
     # Open the login page
@@ -104,13 +98,33 @@ try:
     search_button = WebDriverWait(browser, 10).until(EC.element_to_be_clickable((By.XPATH, '//button[text()="Search"]')))
     search_button.click()
     
+    global_index = 1
+
     while True:
-        extract_results()
+        global_index = extract_results(global_index)
         try:
-            next_page_button = WebDriverWait(browser, 20).until(EC.element_to_be_clickable((By.XPATH, '//a[contains(@href, "&p=") and text()="›"]')))
+            # Locate the "next page" button
+            next_page_button = WebDriverWait(browser, 20).until(
+                EC.element_to_be_clickable((By.XPATH, '//a[contains(@href, "&p=") and contains(text(), ">")]'))
+            )
+            
+            # Save the current URL to check for changes
+            current_url = browser.current_url
+            
+            # Click the "next page" button
             next_page_button.click()
-            WebDriverWait(browser, 20).until(EC.url_changes(url))  # Wait for URL change
-            WebDriverWait(browser, 20).until(EC.presence_of_all_elements_located((By.XPATH, '//div[@class="profiles"]//table//tr[@data-id]')))
+            
+            # Wait for the URL to change
+            WebDriverWait(browser, 20).until(lambda driver: driver.current_url != current_url)
+            
+            # Wait for the next page's results to load
+            WebDriverWait(browser, 20).until(
+                EC.presence_of_all_elements_located((By.XPATH, '//div[@class="profiles"]//table//tr[@data-id]'))
+            )
+            
+            # Add a delay to mimic human behavior
+            time.sleep(10)
+
         except Exception as e:
             print("No more pages or an error occurred: ", e)
             break
