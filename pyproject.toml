@@ -13,6 +13,8 @@ google-auth-httplib2 = "^0.2.0"
 google-auth-oauthlib = "^1.2.1"
 pynput = "^1.7.7"
 python-dotenv = "^1.0.1"
+fastapi = "^0.115.6"
+pydantic = "^2.10.3"
 
 
 [build-system]

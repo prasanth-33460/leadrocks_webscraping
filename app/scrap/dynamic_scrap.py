@@ -5,30 +5,33 @@ from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
+from fastapi import FastAPI
 import csv 
+
+app = FastAPI()
 
 class Scrapper:
     def __init__(self):
         self.browser = webdriver.Chrome()
-        self.output_file = 'app/output/scrapped_data.csv'
-        self.header_written = False
+        # self.output_file = 'app/output/scrapped_data.csv'
+        # self.header_written = False
     
-    def write_to_csv(self, data):
-        """Writes data to a CSV file with the structure of terminal output."""
-        try:
-            with open(self.output_file, mode="a", newline="", encoding="utf-8") as file:
-                writer = csv.writer(file)
+    # def write_to_csv(self, data):
+    #     """Writes data to a CSV file with the structure of terminal output."""
+    #     try:
+    #         with open(self.output_file, mode="a", newline="", encoding="utf-8") as file:
+    #             writer = csv.writer(file)
                 
-                # Write header only once
-                if not self.header_written:
-                    writer.writerow(['Result Index', 'Name', 'Job Title', 'Email', 'Company', 'Company Info', 'Website Link'])
-                    self.header_written = True
+    #             # Write header only once
+    #             if not self.header_written:
+    #                 writer.writerow(['Result Index', 'Name', 'Job Title', 'Email', 'Company', 'Company Info', 'Website Link'])
+    #                 self.header_written = True
                 
-                # Write data for each result
-                writer.writerow([data['Result Index'], data['Name'], data['Job Title'], data['Email'], data['Company'], data['Company Info'], data['Website Link']])
-            print("Data successfully written to CSV.")
-        except Exception as e:
-            print(f"Error writing to CSV: {e}")
+    #             # Write data for each result
+    #             writer.writerow([data['Result Index'], data['Name'], data['Job Title'], data['Email'], data['Company'], data['Company Info'], data['Website Link']])
+    #         print("Data successfully written to CSV.")
+    #     except Exception as e:
+    #         print(f"Error writing to CSV: {e}")
 
     def fill_input_field(self, name, value):
         for _ in range(3):  # Retry up to 3 times
