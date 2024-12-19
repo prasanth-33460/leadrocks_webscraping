@@ -1,226 +1,186 @@
-from selenium import webdriver
+import random
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
-from fastapi import FastAPI
-import csv 
+import logging
+from selenium.common.exceptions import NoSuchElementException
+import json
+from selenium.common.exceptions import StaleElementReferenceException
 
-app = FastAPI()
-
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 class Scrapper:
-    def __init__(self):
-        self.browser = webdriver.Chrome()
-        # self.output_file = 'app/output/scrapped_data.csv'
-        # self.header_written = False
-    
-    # def write_to_csv(self, data):
-    #     """Writes data to a CSV file with the structure of terminal output."""
-    #     try:
-    #         with open(self.output_file, mode="a", newline="", encoding="utf-8") as file:
-    #             writer = csv.writer(file)
-                
-    #             # Write header only once
-    #             if not self.header_written:
-    #                 writer.writerow(['Result Index', 'Name', 'Job Title', 'Email', 'Company', 'Company Info', 'Website Link'])
-    #                 self.header_written = True
-                
-    #             # Write data for each result
-    #             writer.writerow([data['Result Index'], data['Name'], data['Job Title'], data['Email'], data['Company'], data['Company Info'], data['Website Link']])
-    #         print("Data successfully written to CSV.")
-    #     except Exception as e:
-    #         print(f"Error writing to CSV: {e}")
+    def __init__(self, driver,output_file):
+        self.driver = driver
+        self.browser = driver
+        self.output_file = output_file
+        self.data_list=[]
+        self.wait = WebDriverWait(self.browser, 20)
+
+    def random_sleep(self, min_seconds=1, max_seconds=5):
+        sleep_time = random.uniform(min_seconds, max_seconds)  
+        time.sleep(sleep_time)
+        logger.info(f"Slept for {sleep_time:.2f} seconds")
+        
+    def save_to_json(self):
+        try:
+            with open(self.output_file, 'w') as json_file:
+                json.dump(self.data_list, json_file, indent=4)
+            logger.info(f"Data successfully saved to {self.output_file}")
+        except Exception as e:
+            logger.error(f"Error saving data to JSON: {e}")
 
     def fill_input_field(self, name, value):
-        for _ in range(3):  # Retry up to 3 times
+        for attempt in range(5): 
             try:
-                input_field = WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.NAME, name)))
+                input_field = self.wait.until(EC.presence_of_element_located((By.NAME, name)))
+                
+                self.wait.until(EC.element_to_be_clickable((By.NAME, name)))
                 input_field.clear()
                 input_field.send_keys(value)
-                time.sleep(2)  # Added delay to allow for any autocomplete suggestions
-                input_field.send_keys(Keys.ARROW_DOWN)
+                self.random_sleep()
+                
                 input_field.send_keys(Keys.ENTER)
-                break
+                self.random_sleep()
+                
+                refreshed_field = self.wait.until(EC.presence_of_element_located((By.NAME, name)))
+            
+                if refreshed_field.get_attribute("value") == value:
+                    logger.info(f"Successfully filled '{name}' with '{value}'.")
+                    return
+                
+                logger.warning(f"Verification failed for '{name}'. Retrying...")
+            
+            except StaleElementReferenceException:
+                logger.warning(f"Stale element reference detected on attempt {attempt + 1}. Retrying...")
+                self.random_sleep()
             except Exception as e:
-                print(f"Retrying input for {name} due to: {e}")
+                logger.warning(f"Attempt {attempt + 1}: Retrying input for '{name}' due to: {e}")
+                self.random_sleep()
+
+        raise Exception(f"Failed to fill input field '{name}' with value '{value}' after 3 attempts.")
 
     def select_from_dropdown(self, input_name, option_value):
-        """
-        Selects an option from an input field with a datalist by simulating user input.
-
-        Parameters:
-            input_name (str): The `name` attribute of the input field.
-            option_value (str): The value to select from the datalist.
-        """
-        for _ in range(3):  # Retry up to 3 times
+        for attempt in range(3): 
             try:
-                # Wait for the input field to be present
-                input_field = WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.NAME, input_name)))
-                
-                # Clear any existing input and enter the desired value
+                input_field = self.wait.until(EC.presence_of_element_located((By.NAME, input_name)))
                 input_field.click()
-                time.sleep(2)  # Allow time for the datalist suggestions to populate
+                self.random_sleep()
                 
                 datalist_id = input_field.get_attribute("list")
-                options = self.browser.find_elements(By.XPATH, f'//datalist[@id="{datalist_id}"]/option')
+                if not datalist_id:
+                    raise ValueError(f"No datalist associated with input field '{input_name}'.")
                 
+                options = self.wait.until(EC.presence_of_all_elements_located((By.XPATH, f'//datalist[@id="{datalist_id}"]/option')))
+                
+                matched = False
                 for option in options:
-                    if option.get_attribute("value") == option_value:
-                        option.click()  # Select the desired option
-                        time.sleep(1)
+                    if option.get_attribute("value").strip().lower() == option_value.strip().lower():
+                        self.browser.execute_script("arguments[0].value = arguments[1];", input_field, option_value)
+                        self.random_sleep()
+                        matched = True
                         break
-                    else:
-                        raise ValueError(f"Option '{option_value}' not found in the datalist.")
-
-                print(f"Selected '{option_value}' for field '{input_name}'.")
-                return  # Exit loop on success
-            
-            except Exception as e:
-                print(f"Retrying selection for {input_name} due to: {e}")
-                time.sleep(2)  # Wait before retry
-        raise Exception(f"Failed to select '{option_value}' for field '{input_name}' after 3 attempts.")
-                
-    def extract_results(self, global_index):
-        results = WebDriverWait(self.browser, 20).until(EC.presence_of_all_elements_located((By.XPATH, '//div[@class="profiles"]//table//tr[@data-id]')))
-        for result in results:
-            try:
-                name = result.find_element(By.TAG_NAME, 'h3').text
-                job_title = result.find_element(By.TAG_NAME, 'small').text
-                
-                try:
-                    email = result.find_element(By.XPATH, './/span[contains(@class, "label_work")]').text
-                except Exception as e:
-                    email = "N/A"  # If element not found, assign "N/A"
-                    print(f"Error occurred while processing result {global_index}: {e}")
-                
-                
-                try:
-                    company = result.find_element(By.TAG_NAME, 'h4').text
-                except:
-                    company = "N/A"
-                    print(f"Error occurred while processing result {global_index}: {e}")                
-                
-                
-                try:
-                    company_details = result.find_elements(By.TAG_NAME, 'small')
-                except:
-                    company_details = "N/A"
-                    print(f"Error occurred while processing result {global_index}: {e}")
-
                     
-                try:
-                    company_info = ", ".join([detail.text for detail in company_details])
-                except:
-                    company_info = "N/A"
-                    print(f"Error occurred while processing result {global_index}: {e}")
-
-                
-                try:
-                    website_link = result.find_element(By.XPATH, './/a[contains(@class, "url")]').get_attribute('href')
-                except:
-                    website_link = "N/A"  # If website link is missing, set to "N/A"
-                    print(f"Error occurred while processing result {global_index}: {e}")
-
-                # print(f"Result {global_index}:")
-                # print(f"  Name: {name}")
-                # print(f"  Job Title: {job_title}")
-                # print(f"  Email: {email}")
-                # print(f"  Company: {company}")
-                # print(f"  Company Info: {company_info}")
-                # print(f"  Website: {website_link}")
-                # print("------------------------")
-                
-                data = {
-                    'Result Index': global_index,
-                    'Name': name,
-                    'Job Title': job_title,
-                    'Email': email,
-                    'Company': company,
-                    'Company Info': company_info,
-                    'Website Link': website_link
-                }
-                self.write_to_csv(data)
-                global_index += 1
-            
+                if matched:
+                    logger.info(f"Selected '{option_value}' for field '{input_name}'.")
+                    return
+                else:
+                    raise ValueError(f"Option '{option_value}' not found in the dropdown.")
             except Exception as e:
-                print(f"An error occurred while processing result {global_index}: {e}")
-            
-        return global_index
+                logger.warning(f"Attempt {attempt + 1} failed for {input_name} due to: {e}")
+                self.random_sleep()
 
-if __name__ == "__main__":
-    scrap = Scrapper()
-    try:
-        # Open the login page
-        url = "https://leadrocks.io/my"
-        scrap.browser.get(url)
-        
-        # Wait for the email input to be present
-        email_input = WebDriverWait(scrap.browser, 20).until(EC.presence_of_element_located((By.NAME, 'email')))
-        email_input.clear()
-        email_input.send_keys('prasanth33460@gmail.com')  # Replace with the email you want to use
-        
-        # Click the "Next" button
-        next_button = WebDriverWait(scrap.browser, 10).until(EC.element_to_be_clickable((By.XPATH, '//button[text()="Next"]')))
-        next_button.click()
-        
-        # Wait until the "Go" button is present
-        go_button = WebDriverWait(scrap.browser, 60).until(EC.element_to_be_clickable((By.XPATH, '//button/div[text()="Go"]')))
-        go_button.click()
-        
-        # Wait for the homepage to load
-        WebDriverWait(scrap.browser, 20).until(EC.presence_of_element_located((By.NAME, 'position')))
-        
-        # Manually enter job title and company name/URL
-        scrap.fill_input_field('position', 'Software Engineer')  # Manually enter the job title
-        scrap.fill_input_field('company', 'Google')  # Manually enter the company name or URL
-        scrap.fill_input_field('geo', 'United States')
-        
-        # Use drop-down selection for location, industry, team size, revenue range, and total funding
-        # scrap.select_from_dropdown('industry', 'information technology and services')
-        # scrap.select_from_dropdown('team_size', '10001+')
-        # scrap.select_from_dropdown('revenue_range', '$1M to $10M')
-        # scrap.select_from_dropdown('total_funding', '$10M to $100M')
-        
-        # Click the "Search" button
-        search_button = WebDriverWait(scrap.browser, 10).until(EC.element_to_be_clickable((By.XPATH, '//button[text()="Search"]')))
-        search_button.click()
-        
-        global_index = 1
+        raise Exception(f"Failed to select '{option_value}' for field '{input_name}' after 3 attempts.")
 
-        while True:
-            global_index = scrap.extract_results(global_index)
-            
-            try:
-                # Locate the "next page" button
-                next_page_button = WebDriverWait(scrap.browser, 20).until(
-                    EC.element_to_be_clickable((By.XPATH, '//a[contains(@href, "&p=") and contains(text(), ">")]'))
-                )
+    def scrape_data(self, global_index):
+        try:
+            while True:
+                results = self.wait.until(EC.presence_of_all_elements_located((By.XPATH, '//div[@class="profiles"]//table//tr[@data-id]')))
+                for result in results:
+                    try:
+                        data = self.extract_data_from_result(result, global_index)
+                        self.random_sleep()
+                        self.data_list.append(data)
+                        self.random_sleep()
+                        logger.info(f"Scraped data: {data}")
+                        global_index += 1
+                    except Exception as e:
+                        logger.warning(f"Error extracting data for a result: {e}")
                 
-                # Save the current URL to check for changes
-                current_url = scrap.browser.current_url
+                try:
+                    next_page_button = self.wait.until(EC.element_to_be_clickable((By.XPATH, '//a[contains(@href, "&p=") and contains(text(), ">")]')))
+                    current_url = self.browser.current_url
+                    self.random_sleep()
+                    next_page_button.click()
+                    
+                    self.wait.until(lambda driver: driver.current_url != current_url)
+                    logger.info("Navigated to the next page.")
+                except Exception as e:
+                    logger.warning(f"No more pages or an error occurred: {e}")
+                    break
                 
-                # Click the "next page" button
-                next_page_button.click()
-                
-                # Wait for the URL to change
-                WebDriverWait(scrap.browser, 20).until(lambda driver: driver.current_url != current_url)
-                
-                # Wait for the next page's results to load
-                WebDriverWait(scrap.browser, 20).until(
-                    EC.presence_of_all_elements_located((By.XPATH, '//div[@class="profiles"]//table//tr[@data-id]'))
-                )
-                
-                # Add a delay to mimic human behavior
-                time.sleep(10)
-                
-            except Exception as e:
-                print("No more pages or an error occurred: ", e)
-                break
-
-    except Exception as e:
-        print(f"An error occurred: {e}")
-
-    finally:
-        scrap.browser.quit()
+            self.save_to_json()
+            return global_index
+        
+        except Exception as e:
+            logger.error(f"Error occurred during scraping: {e}")
+            return global_index
+        
+    def extract_data_from_result(self, result, global_index):
+        try:
+            name = result.find_element(By.TAG_NAME, 'h3').text
+        except Exception as e:
+            name="N/A"
+            logger.error(f"Error extracting name for result {global_index}: {e}")
+        # self.random_sleep()
+        try:
+            job_title = result.find_element(By.TAG_NAME, 'small').text
+        except Exception as e:
+            job_title = "N/A"
+            logger.error(f"Error extracting job title for result {global_index}: {e}")
+        # self.random_sleep()
+        try:
+            email_element = self.wait.until(EC.presence_of_element_located((By.XPATH, './/span[contains(@class, "label_work")]')))
+            email = email_element.text  
+        except Exception as e:
+            email = "N/A"
+            logger.error(f"Error occurred while processing result {global_index}: {e}")
+        self.random_sleep()
+        try:
+            company = result.find_element(By.TAG_NAME, 'h4').text
+        except Exception as e:
+            company = "N/A"
+            logger.error(f"Error occurred while processing result {global_index}: {e}")             
+        # self.random_sleep()
+        try:
+            company_details = result.find_elements(By.TAG_NAME, 'small')
+        except Exception as e:
+            company_details = "N/A"
+            logger.error(f"Error occurred while processing result {global_index}: {e}")
+        # self.random_sleep()
+        try:
+            company_info = ", ".join([detail.text for detail in company_details])
+        except Exception as e:
+            company_info = "N/A"
+            logger.error(f"Error occurred while processing result {global_index}: {e}")
+        # self.random_sleep()
+        try:
+            website_link = result.find_element(By.XPATH, './/a[contains(@class, "url")]').get_attribute('href')
+        except NoSuchElementException:
+            website_link = "N/A"  
+            logger.error(f"Error extracting website link for result {global_index}")
+        except Exception as e:
+            website_link = "N/A"  
+            logger.error(f"Unexpected error extracting website link for result {global_index}: {e}")
+        # self.random_sleep()
+        return{
+            'Result Index': global_index,
+            'Name': name,
+            'Job Title': job_title,
+            'Email': email,
+            'Company': company,
+            'Company Info': company_info,
+            'Website Link': website_link
+        }
