@@ -3,17 +3,22 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import logging
+from selenium.common.exceptions import WebDriverException
 
 class LoginModule:
     def __init__(self, base_url, email, otp_function):
         self.base_url = base_url
         self.email = email
         self.otp_function = otp_function
-        self.driver = webdriver.Chrome()
-        self.wait = WebDriverWait(self.driver, 15)
         
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-        self.logger = logging.getLogger(__name__)
+        try:
+            self.driver = webdriver.Chrome()
+            self.wait = WebDriverWait(self.driver, 20)
+            logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+            self.logger = logging.getLogger(__name__)
+        except WebDriverException as e:
+            self.logger.error(f"Failed to initialize WebDriver: {e}")
+            raise
         
     def open_page(self):
         try:

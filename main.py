@@ -17,7 +17,7 @@ def main():
     
     base_url = "https://leadrocks.io/my"
     email = "prasanth33460@gmail.com"
-    output_file_path = "app/output/file.json"
+    output_file_path = os.path.abspath("app/output/file.json")
     
     os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
     
@@ -29,7 +29,7 @@ def main():
             return
         logger.info("Login successful. Initializing scraper...")
         
-        scraper = Scrapper(driver, output_file="scraped_data.json")
+        scraper = Scrapper(driver, output_file=output_file_path)
         logger.info("Filling input fields before starting the scraping...")
         
         scraper.fill_input_field('position', 'Software Engineer') 
@@ -56,13 +56,14 @@ def main():
             scraper.random_sleep() 
         
         logger.info("Scraping completed successfully.")
+        logger.info("Saving scraped data to JSON file...")
         scraper.save_to_json()
             
     except Exception as e:
         logger.error(f"An error occurred during execution: {e}")
         
     finally:
-        if 'driver' in locals() and driver:
+        if driver:
             driver.quit()
             logger.info("Browser closed.")
         login_module.close()

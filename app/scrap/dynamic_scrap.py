@@ -12,7 +12,7 @@ from selenium.common.exceptions import StaleElementReferenceException
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 class Scrapper:
-    def __init__(self, driver,output_file):
+    def __init__(self, driver,output_file="app/output/file.json"):
         self.driver = driver
         self.browser = driver
         self.output_file = output_file
@@ -36,8 +36,8 @@ class Scrapper:
         for attempt in range(5): 
             try:
                 input_field = self.wait.until(EC.presence_of_element_located((By.NAME, name)))
-                
                 self.wait.until(EC.element_to_be_clickable((By.NAME, name)))
+                
                 input_field.clear()
                 input_field.send_keys(value)
                 self.random_sleep()
@@ -50,9 +50,8 @@ class Scrapper:
                 if refreshed_field.get_attribute("value") == value:
                     logger.info(f"Successfully filled '{name}' with '{value}'.")
                     return
-                
-                logger.warning(f"Verification failed for '{name}'. Retrying...")
-            
+                else:
+                    logger.warning(f"Verification failed for '{name}'. Retrying...")
             except StaleElementReferenceException:
                 logger.warning(f"Stale element reference detected on attempt {attempt + 1}. Retrying...")
                 self.random_sleep()
@@ -82,7 +81,6 @@ class Scrapper:
                         self.random_sleep()
                         matched = True
                         break
-                    
                 if matched:
                     logger.info(f"Selected '{option_value}' for field '{input_name}'.")
                     return
@@ -103,7 +101,6 @@ class Scrapper:
                         data = self.extract_data_from_result(result, global_index)
                         self.random_sleep()
                         self.data_list.append(data)
-                        self.random_sleep()
                         logger.info(f"Scraped data: {data}")
                         global_index += 1
                     except Exception as e:
@@ -120,7 +117,7 @@ class Scrapper:
                 except Exception as e:
                     logger.warning(f"No more pages or an error occurred: {e}")
                     break
-                
+            logger.info(f"Data collected: {len(self.data_list)} items.")
             self.save_to_json()
             return global_index
         
@@ -134,38 +131,40 @@ class Scrapper:
         except Exception as e:
             name="N/A"
             logger.error(f"Error extracting name for result {global_index}: {e}")
-        # self.random_sleep()
+            
         try:
             job_title = result.find_element(By.TAG_NAME, 'small').text
         except Exception as e:
             job_title = "N/A"
             logger.error(f"Error extracting job title for result {global_index}: {e}")
-        # self.random_sleep()
+            
         try:
             email_element = self.wait.until(EC.presence_of_element_located((By.XPATH, './/span[contains(@class, "label_work")]')))
             email = email_element.text  
         except Exception as e:
             email = "N/A"
             logger.error(f"Error occurred while processing result {global_index}: {e}")
+            
         self.random_sleep()
+        
         try:
             company = result.find_element(By.TAG_NAME, 'h4').text
         except Exception as e:
             company = "N/A"
             logger.error(f"Error occurred while processing result {global_index}: {e}")             
-        # self.random_sleep()
+
         try:
             company_details = result.find_elements(By.TAG_NAME, 'small')
         except Exception as e:
             company_details = "N/A"
             logger.error(f"Error occurred while processing result {global_index}: {e}")
-        # self.random_sleep()
+
         try:
             company_info = ", ".join([detail.text for detail in company_details])
         except Exception as e:
             company_info = "N/A"
             logger.error(f"Error occurred while processing result {global_index}: {e}")
-        # self.random_sleep()
+
         try:
             website_link = result.find_element(By.XPATH, './/a[contains(@class, "url")]').get_attribute('href')
         except NoSuchElementException:
@@ -174,7 +173,7 @@ class Scrapper:
         except Exception as e:
             website_link = "N/A"  
             logger.error(f"Unexpected error extracting website link for result {global_index}: {e}")
-        # self.random_sleep()
+
         return{
             'Result Index': global_index,
             'Name': name,
