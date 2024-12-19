@@ -4,12 +4,12 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
+import os
 import logging
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 import json
-from selenium.common.exceptions import StaleElementReferenceException
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(filename='app/output/scrap.log',level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 class Scrapper:
     def __init__(self, driver,output_file="app/output/file.json"):
@@ -26,6 +26,7 @@ class Scrapper:
         
     def save_to_json(self):
         try:
+            os.makedirs(os.path.dirname(self.output_file), exist_ok=True)
             with open(self.output_file, 'w') as json_file:
                 json.dump(self.data_list, json_file, indent=4)
             logger.info(f"Data successfully saved to {self.output_file}")
@@ -106,72 +107,57 @@ class Scrapper:
                     except Exception as e:
                         logger.warning(f"Error extracting data for a result: {e}")
                 
-                try:
-                    next_page_button = self.wait.until(EC.element_to_be_clickable((By.XPATH, '//a[contains(@href, "&p=") and contains(text(), ">")]')))
-                    current_url = self.browser.current_url
-                    self.random_sleep()
-                    next_page_button.click()
-                    
-                    self.wait.until(lambda driver: driver.current_url != current_url)
-                    logger.info("Navigated to the next page.")
-                except Exception as e:
-                    logger.warning(f"No more pages or an error occurred: {e}")
+                if not self.go_to_next_page():
                     break
+                
             logger.info(f"Data collected: {len(self.data_list)} items.")
             self.save_to_json()
             return global_index
-        
         except Exception as e:
             logger.error(f"Error occurred during scraping: {e}")
             return global_index
         
     def extract_data_from_result(self, result, global_index):
+        name = job_title = email = company = company_info = website_link = "N/A"
         try:
-            name = result.find_element(By.TAG_NAME, 'h3').text
+            name_element = WebDriverWait(result, 10).until(EC.presence_of_element_located((By.TAG_NAME, 'h3')))
+            name = name_element.text.strip() or "N/A"
         except Exception as e:
-            name="N/A"
             logger.error(f"Error extracting name for result {global_index}: {e}")
             
         try:
-            job_title = result.find_element(By.TAG_NAME, 'small').text
+            job_title_element = WebDriverWait(result, 10).until(EC.presence_of_element_located((By.TAG_NAME, 'small')))
+            job_title = job_title_element.text.strip() or "N/A"
         except Exception as e:
-            job_title = "N/A"
             logger.error(f"Error extracting job title for result {global_index}: {e}")
             
         try:
-            email_element = self.wait.until(EC.presence_of_element_located((By.XPATH, './/span[contains(@class, "label_work")]')))
-            email = email_element.text  
+            email_element = WebDriverWait(result, 10).until(EC.presence_of_element_located((By.XPATH, './/span[contains(@class, "label_work")]')))
+            email = email_element.text.strip() or "N/A"  
         except Exception as e:
-            email = "N/A"
             logger.error(f"Error occurred while processing result {global_index}: {e}")
             
         self.random_sleep()
         
         try:
-            company = result.find_element(By.TAG_NAME, 'h4').text
+            company_element = WebDriverWait(result, 10).until(EC.presence_of_element_located((By.TAG_NAME, 'h4')))
+            company = company_element.text.strip() or "N/A"
         except Exception as e:
-            company = "N/A"
             logger.error(f"Error occurred while processing result {global_index}: {e}")             
 
         try:
-            company_details = result.find_elements(By.TAG_NAME, 'small')
+            company_details_element = WebDriverWait(result, 10).until(EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'profiles')]//table//tbody//tr//td[position()=5]")))
+            company_info = company_details_element.text.strip() or "N/A"
+            company_info = company_info.replace('\n', ', ')
         except Exception as e:
-            company_details = "N/A"
             logger.error(f"Error occurred while processing result {global_index}: {e}")
 
         try:
-            company_info = ", ".join([detail.text for detail in company_details])
-        except Exception as e:
-            company_info = "N/A"
-            logger.error(f"Error occurred while processing result {global_index}: {e}")
-
-        try:
-            website_link = result.find_element(By.XPATH, './/a[contains(@class, "url")]').get_attribute('href')
+            website_element = WebDriverWait(result, 10).until(EC.presence_of_element_located((By.XPATH, './/a[contains(@class, "url")]')))
+            website_link = website_element.get_attribute('href').strip() if website_element else "N/A"
         except NoSuchElementException:
-            website_link = "N/A"  
             logger.error(f"Error extracting website link for result {global_index}")
         except Exception as e:
-            website_link = "N/A"  
             logger.error(f"Unexpected error extracting website link for result {global_index}: {e}")
 
         return{
@@ -183,3 +169,20 @@ class Scrapper:
             'Company Info': company_info,
             'Website Link': website_link
         }
+        
+    def go_to_next_page(self):
+        try:
+            next_page_button = self.wait.until(EC.element_to_be_clickable((By.XPATH, '//a[contains(@href, "&p=") and contains(text(), ">")]')))
+            current_url = self.browser.current_url
+            self.random_sleep()
+            next_page_button.click()
+            
+            self.wait.until(lambda driver: driver.current_url != current_url)
+            
+            self.wait.until(EC.presence_of_all_elements_located((By.XPATH, '//div[@class="profiles"]//table//tr[@data-id]')))
+            
+            logger.info("Navigated to next page.")
+            return True
+        except Exception as e:
+            logger.warning(f"No more pages or an error occurred: {e}")
+            return False

@@ -1,24 +1,27 @@
 from app.scrap.dynamic_scrap import Scrapper
 from app.login.login_automation import LoginModule
-import time
+from fastapi import FastAPI, HTTPException
 import os
 import logging
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 
-def get_otp():
-    otp = input("Enter the OTP: ")
-    return otp
+app = FastAPI()
 
-def main():
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+def get_otp():
+    return input("Enter the OTP: ")
+
+@app.get("/")
+def scrape_data():
+    log_file_path = os.path.abspath("app/output/main.log")
+    os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+    logging.basicConfig(filename=log_file_path, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(__name__)
     
     base_url = "https://leadrocks.io/my"
     email = "prasanth33460@gmail.com"
-    output_file_path = os.path.abspath("app/output/file.json")
-    
+    output_file_path = os.path.abspath("app/output/output_file.json")
     os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
     
     try:
@@ -26,7 +29,7 @@ def main():
         driver = login_module.login()
         if not driver:
             logger.error("Login failed. Exiting program.")
-            return
+            raise HTTPException(status_code=400, detail="Login failed")
         logger.info("Login successful. Initializing scraper...")
         
         scraper = Scrapper(driver, output_file=output_file_path)
@@ -56,17 +59,16 @@ def main():
             scraper.random_sleep() 
         
         logger.info("Scraping completed successfully.")
-        logger.info("Saving scraped data to JSON file...")
         scraper.save_to_json()
+        logger.info("Data saved to JSON file...")
+        return {"status": "success", "message": "Scraping completed successfully.", "output_file": output_file_path}
             
     except Exception as e:
         logger.error(f"An error occurred during execution: {e}")
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
         
     finally:
         if driver:
             driver.quit()
             logger.info("Browser closed.")
         login_module.close()
-        
-if __name__ == "__main__":
-    main()
