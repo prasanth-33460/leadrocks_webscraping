@@ -57,12 +57,14 @@ def scrape_data():
                 logger.info("No new data found or end of pages reached.")
                 break
             scraper.random_sleep() 
-        
         logger.info("Scraping completed successfully.")
+        
+        scraper.save_to_mongo()
+        logger.info("Data saved to MongoDB...")
+        
         scraper.save_to_json()
         logger.info("Data saved to JSON file...")
         return {"status": "success", "message": "Scraping completed successfully.", "output_file": output_file_path}
-            
     except Exception as e:
         logger.error(f"An error occurred during execution: {e}")
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")

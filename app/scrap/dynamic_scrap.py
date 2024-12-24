@@ -8,6 +8,7 @@ import os
 import logging
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 import json
+from pymongo import MongoClient
 
 logging.basicConfig(filename='app/output/scrap.log',level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -18,6 +19,10 @@ class Scrapper:
         self.output_file = output_file
         self.data_list=[]
         self.wait = WebDriverWait(self.browser, 20)
+        
+        self.client = MongoClient('mongodb://172.30.100.76:27017')
+        self.db = self.client["webscraping_db"]
+        self.collection = self.db["scraped_data"]
 
     def random_sleep(self, min_seconds=1, max_seconds=5):
         sleep_time = random.uniform(min_seconds, max_seconds)  
@@ -32,6 +37,19 @@ class Scrapper:
             logger.info(f"Data successfully saved to {self.output_file}")
         except Exception as e:
             logger.error(f"Error saving data to JSON: {e}")
+            
+    def save_to_mongo(self):
+        try:
+            for data in self.data_list:
+                if '_id' in data:
+                    del data['_id']
+                    
+                self.collection.insert_one(data)
+                logger.info(f"Data successfully saved to MongoDB.")
+            else:
+                logger.warning("No data to insert into MongoDB.")
+        except Exception as e:
+            logger.error(f"Error saving data to MongoDB: {e}")
 
     def fill_input_field(self, name, value):
         for attempt in range(5): 
@@ -104,6 +122,7 @@ class Scrapper:
                         self.data_list.append(data)
                         logger.info(f"Scraped data: {data}")
                         global_index += 1
+                        self.save_to_mongo()
                     except Exception as e:
                         logger.warning(f"Error extracting data for a result: {e}")
                 
